@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>幸运抽奖轮盘</title>
+    <button id="scrollLockButton">锁定滚动</button>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 50px;
+        }
+        h1 {
+            margin-top: 50px; 
+            margin-bottom: 50px;
+            font-size: 36px; 
+            color: #333;
+        }
+        #wheel-container {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            margin: 0 auto;
+        }
+        #wheel {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 10px solid #000;
+            background: conic-gradient(
+                #f00 0 72deg,
+                #0f0 72deg 144deg,
+                #00f 144deg 216deg,
+                #ff0 216deg 288deg,
+                #0ff 288deg 360deg
+            );
+            position: relative;
+            transition: transform 6s ease-out;
+        }
+        #wheel span {
+            position: absolute;
+            width: 50%;
+            height: 50%;
+            top: 50%;
+            left: 50%;
+            transform-origin: 0% 0%;
+            font-size: 24px;
+            font-weight: bold;
+            color: #fff;
+        }
+        #wheel span:nth-child(1) { transform: rotate(36deg) translate(-50%, -50%); }
+        #wheel span:nth-child(2) { transform: rotate(108deg) translate(-50%, -50%); }
+        #wheel span:nth-child(3) { transform: rotate(180deg) translate(-50%, -50%); }
+        #wheel span:nth-child(4) { transform: rotate(252deg) translate(-50%, -50%); }
+        #wheel span:nth-child(5) { transform: rotate(324deg) translate(-50%, -50%); }
+        
+        #pointer {
+            width: 0;
+            height: 0;
+            border-left: 25px solid transparent;
+            border-right: 25px solid transparent;
+            border-bottom: 50px solid #000;
+            position: absolute;
+            top: -25px;
+            left: calc(54% - 25px);
+            z-index: 10;
+            transform: rotate(180deg);
+        }
+        #spinButton {
+            position: absolute;
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-40%, -40%);
+            width: 80px; 
+            height: 80px; 
+            border-radius: 50%; 
+            background-color: #ff6600; 
+            color: #fff; 
+            border: none; 
+            font-size: 18px; 
+            cursor: pointer;
+            z-index: 15; /* 确保按钮在最前面 */
+        }
+        #resultModal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #fff;
+            padding: 20px;
+            border: 2px solid #000;
+            z-index: 200; /* 确保弹窗在最上层 */
+            text-align: center;
+        }
+        #resetButton {
+            margin-top: 150px;
+            padding: 10px 20px;
+            font-size: 18px;
+        }
+        #closeButton {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        #history {
+            margin-top: 100px;
+            font-size: 18px;
+            text-align: left;
+            max-width: 300px;
+            margin: 0 auto;
+        }
+        #scrollLockButton {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            z-index: 1000; /* 确保按钮在最上层 */
+        }
+        #scrollLockButton.locked {
+            background-color: #dc3545; /* 红色表示已锁定 */
+        }
+        .scroll-lock {
+            overflow: hidden;
+        }
+        #confetti-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 150; /* 确保彩带在弹窗之下 */
+            pointer-events: none; /* 不阻止用户与页面其他内容交互 */
+        }
+        #confetti {
+            width: 100%; /* 填满全屏 */
+            height: 100%; /* 填满全屏 */
+            object-fit: cover; /* 确保图像适应容器 */
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>幸运抽奖轮盘</h1>
+    <div id="wheel-container">
+        <div id="wheel">
+            <span>A</span>
+            <span>B</span>
+            <span>C</span>
+            <span>D</span>
+            <span>E</span>
+        </div>
+        <div id="pointer"></div>
+        <button id="spinButton">抽奖</button>
+    </div>
+    <button id="resetButton">刷新抽奖记录</button>
+    <div id="resultModal">
+        <div id="result">恭喜你获得奖品！</div>
+        <button id="closeButton">关闭</button>
+    </div>
+    <div id="history">抽奖记录：</div>
+
+    <!-- 添加音频元素 -->
+    <audio id="spinSound" src="spin.mp3"></audio>
+    <audio id="cheerSound" src="cheer.mp3"></audio>
+
+    <!-- 添加彩带特效容器 -->
+    <div id="confetti-container">
+        <img src="confetti.gif" id="confetti" alt="Confetti">
+    </div>
+
+    <script>
+        // 切换滚动锁定状态
+        let scrollLocked = false;
+
+        // 锁定滚动
+        function lockScroll() {
+            document.body.classList.add('scroll-lock');
+            document.getElementById('scrollLockButton').classList.add('locked');
+            document.getElementById('scrollLockButton').textContent = '解锁滚动';
+            scrollLocked = true;
+        }
+
+        // 解锁滚动
+        function unlockScroll() {
+            document.body.classList.remove('scroll-lock');
+            document.getElementById('scrollLockButton').classList.remove('locked');
+            document.getElementById('scrollLockButton').textContent = '锁定滚动';
+            scrollLocked = false;
+        }
+
+        // 事件绑定
+        document.getElementById('scrollLockButton').onclick = function() {
+            if (scrollLocked) {
+                unlockScroll();
+            } else {
+                lockScroll();
+            }
+        };
+
+        // 播放音效函数
+        function playSound(id) {
+            const sound = document.getElementById(id);
+            if (sound) {
+                sound.play();
+            }
+        }
+
+        // 奖项定义和初始设置
+        const prizes = ["A", "B", "C", "D", "E"];
+        const prizeCounts = { A: 4, B: 8, C: 48, D: 100, E: 240 };
+        let currentPrizeCounts = { A: 0, B: 0, C: 0, D: 0, E: 0 };
+        let prizePool = [];
+        let spinning = false; // 旋转状态标志
+
+        // 初始化奖项池
+        function initializePrizePool() {
+            prizePool = [];
+            currentPrizeCounts = { A: 0, B: 0, C: 0, D: 0, E: 0 }; // 重置计数
+            for (const [prize, count] of Object.entries(prizeCounts)) {
+                prizePool.push(...Array(count).fill(prize));
+            }
+            shuffle(prizePool);
+            updateHistory(); // 初始化历史记录
+        }
+
+        // Fisher-Yates 洗牌算法随机打乱数组
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        // 抽奖函数
+        function spinWheel() {
+            if (prizePool.length === 0) {
+                alert("所有奖项已抽完！");
+                return;
+            }
+
+            if (spinning) return; // 如果正在旋转，忽略点击
+            spinning = true; // 设置旋转状态
+
+            playSound('spinSound'); // 播放旋转音效
+
+            const randomIndex = Math.floor(Math.random() * prizePool.length);
+            const selectedPrize = prizePool.splice(randomIndex, 1)[0];
+            currentPrizeCounts[selectedPrize]++;
+
+            const segmentAngle = 360 / prizes.length;
+            const selectedIndex = prizes.indexOf(selectedPrize);
+            const rotation = 360 * 5 + (360 - selectedIndex * segmentAngle - segmentAngle / 2);
+
+            const wheel = document.getElementById("wheel");
+            wheel.style.transform = `rotate(${rotation}deg)`;
+
+            setTimeout(() => {
+                // 显示结果弹窗
+                const resultDiv = document.getElementById("result");
+                resultDiv.textContent = `恭喜你获得${selectedPrize}奖！`;
+                const resultModal = document.getElementById("resultModal");
+                resultModal.style.display = "block";
+
+                playSound('cheerSound'); // 播放中奖音效
+                document.getElementById('confetti').style.display = 'block'; // 显示彩带
+
+                updateHistory();
+                saveState(); // 保存状态
+            }, 6000); // 6秒钟后显示结果
+        }
+
+        // 更新历史记录
+        function updateHistory() {
+            let historyText = "抽奖记录：<br>";
+            for (const [prize, count] of Object.entries(currentPrizeCounts)) {
+                historyText += `${prize}奖: ${count}次<br>`;
+            }
+            document.getElementById("history").innerHTML = historyText;
+        }
+
+        // 保存状态到 localStorage
+        function saveState() {
+            localStorage.setItem('prizePool', JSON.stringify(prizePool));
+            localStorage.setItem('currentPrizeCounts', JSON.stringify(currentPrizeCounts));
+        }
+
+        // 加载状态从 localStorage
+        function loadState() {
+            const savedPrizePool = localStorage.getItem('prizePool');
+            const savedCurrentPrizeCounts = localStorage.getItem('currentPrizeCounts');
+
+            if (savedPrizePool) {
+                prizePool = JSON.parse(savedPrizePool);
+                currentPrizeCounts = JSON.parse(savedCurrentPrizeCounts);
+            } else {
+                initializePrizePool(); // 如果没有保存的状态，初始化奖池
+            }
+        }
+
+        // 事件绑定
+        document.getElementById("spinButton").onclick = function() {
+            spinWheel();
+        };
+
+        document.getElementById("resetButton").onclick = function() {
+            initializePrizePool(); // 重新初始化奖池
+            alert("奖池已刷新！");
+            saveState(); // 保存新状态
+        };
+
+        // 关闭弹窗
+        document.getElementById("closeButton").onclick = function() {
+            const resultModal = document.getElementById("resultModal");
+            resultModal.style.display = "none";
+            spinning = false; // 重置旋转状态，允许再次旋转
+
+            const wheel = document.getElementById("wheel");
+            wheel.style.transition = "none"; // 关闭动画效果
+            wheel.style.transform = `rotate(0deg)`; // 重置位置
+            setTimeout(() => wheel.style.transition = "transform 6s ease-out", 0); // 恢复动画效果
+
+            // 隐藏彩带
+            document.getElementById('confetti').style.display = 'none';
+        };
+
+        // 初始化奖项池和显示历史
+        loadState(); // 加载保存的状态
+        updateHistory();
+    </script>
+
+</body>
+</html>
